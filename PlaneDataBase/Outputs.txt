@@ -1,0 +1,977 @@
+--task 1
+--a.
+SQL> SELECT SUM(cost)
+  2  FROM SERVICE
+  3  WHERE aircraftID = 'A0001'
+  4  AND serviceDate BETWEEN TO_DATE('01-JUL-2017') AND TO_DATE('30-JUN-2018');
+
+ SUM(COST)                                                                      
+----------                                                                      
+     52000                                                                      
+
+--b.
+SQL> SELECT A.modelID, F.aircraftID, (NVL(M.economySeats,0) + NVL(M.businessSeats,0) + NVL(M.firstClassSeats,0)) AS totalNumberOfSeats, L.country, (24*(F.actArriveDateTime - F.actDepartDateTime)) AS actualFlightDuration
+  2  FROM FLIGHT F, AIRCRAFT A, MODEL M, ROUTE R, LOCATION L
+  3  WHERE A.modelID = M.modelID
+  4  AND F.aircraftID = A.aircraftID
+  5  AND R.routeID = F.routeID
+  6  AND L.airportCode = R.departAirportCode
+  7  AND L.airportCode = 'NEX'
+  8  AND F.actArriveDateTime IS NOT NULL;
+
+MODELID         AIRCR TOTALNUMBEROFSEATS COUNTRY    ACTUALFLIGHTDURATION        
+--------------- ----- ------------------ ---------- --------------------        
+Boeing 737-800  A0002                174 New Endor                     3        
+Boeing 787-8    A0004                250 New Endor                     8        
+Boeing 747-8    A0006                410 New Endor                     7        
+
+--c.
+SQL> SELECT MAX(24*(F.actArriveDateTime - F.actDepartDateTime)) AS actualFlightDuration, A.modelID, M.planeLength, M.wingspan, L.country
+  2  FROM FLIGHT F, AIRCRAFT A, MODEL M, ROUTE R, LOCATION L
+  3  WHERE A.modelID = M.modelID
+  4  AND F.aircraftID = A.aircraftID
+  5  AND R.routeID = F.routeID
+  6  AND L.airportCode = R.departAirportCode
+  7  AND L.airportCode = 'NEX'
+  8  AND F.actDepartDateTime IS NOT NUll
+  9  AND (24*(F.actArriveDateTime - F.actDepartDateTime)) = (SELECT MAX(24*(F.actArriveDateTime - F.actDepartDateTime))
+ 10  													   FROM FLIGHT F, ROUTE R
+ 11  													   WHERE R.routeID = F.routeID
+ 12  													   AND 'NEX' = R.departAirportCode
+ 13  													   AND F.actDepartDateTime IS NOT NUll)
+ 14  GROUP BY(A.modelID, M.planeLength, M.wingspan, L.country);
+
+ACTUALFLIGHTDURATION MODELID         PLANELENGTH   WINGSPAN COUNTRY             
+-------------------- --------------- ----------- ---------- ----------          
+                   8 Boeing 787-8           5672       6012 New Endor           
+
+--d.
+SQL> SELECT T3.staffID, NVL(prevHours,0) + NVL(CapOrFOTotalHours,0) + NVL(APHours,0) AS "totalFlyingExperience"
+  2  FROM
+  3  	(SELECT SSS.staffID, SSS.prevHrsPilotExp AS prevHours
+  4  	FROM STAFF SSS
+  5  	WHERE SSS.pilotYesNo = 'y'
+  6  	GROUP BY(SSS.staffID, SSS.prevHrsPilotExp)) T3,
+  7  	(SELECT S.staffID, (SUM(24*(F.actArriveDateTime - F.actDepartDateTime))) AS CapOrFOTotalHours
+  8  	FROM STAFF S, FLIGHT F
+  9  	WHERE (S.staffID = F.captainStaffID OR S.staffID = F.firstOfficerStaffID)
+ 10  	GROUP BY(S.staffID)) T1,
+ 11  	(SELECT SS.staffID, SUM(24*(FF.actArriveDateTime - FF.actDepartDateTime)) AS APHours
+ 12  	FROM STAFF SS, FLIGHT FF, ADDITIONAL_PILOT AP
+ 13  	WHERE SS.staffID = AP.staffID
+ 14  	AND AP.flightID = FF.flightID
+ 15  	GROUP BY(SS.staffID)) T2
+ 16  WHERE T3.staffID = T1.staffID(+)
+ 17  AND T3.staffID = T2.staffID(+);
+
+STAFF totalFlyingExperience                                                     
+----- ---------------------                                                     
+S0009            5439.33333                                                     
+S0001            4140.83333                                                     
+S0010                  7645                                                     
+S0002            3699.83333                                                     
+S0014                  4000                                                     
+S0011            1023.66667                                                     
+S0012            1011.83333                                                     
+S0013                  1000                                                     
+S0006                  2689                                                     
+
+9 rows selected.
+
+--e.
+SQL> SELECT F.flightID, F.estDepartureDateTime, SC.staffID, SC.prevHrsPilotExp,
+  2  	   SO.staffID, SO.prevHrsPilotExp,
+  3  	(SELECT SUM(24*(F2.actArriveDateTime - F2.actDepartDateTime))
+  4  	FROM FLIGHT F2
+  5  	WHERE (F2.captainStaffID = SC.staffID OR F2.firstOfficerStaffID = SC.staffID OR SC.staffID IN  (SELECT AD.staffID
+  6  																								   FROM ADDITIONAL_PILOT AD
+  7  																								   WHERE AD.flightID = F2.flightID))
+  8  	AND (F2.estDepartureDateTime < F.estDepartureDateTime)) AS capTotalHoursBeforeFlight,
+  9  	(SELECT SUM(24*(F3.actArriveDateTime - F3.actDepartDateTime))
+ 10  	FROM FLIGHT F3
+ 11  	WHERE (F3.captainStaffID = SO.staffID OR F3.firstOfficerStaffID = SO.staffID OR SO.staffID IN (SELECT AD.staffID
+ 12  																								   FROM ADDITIONAL_PILOT AD
+ 13  																								   WHERE AD.flightID = F3.flightID))
+ 14  	AND (F3.estDepartureDateTime < F.estDepartureDateTime)) AS FOTotalHoursBeforeFlight
+ 15  FROM FLIGHT F, STAFF SC, STAFF SO
+ 16  WHERE (SC.staffID = F.captainStaffID AND SO.staffID = F.firstOfficerStaffID)
+ 17  ORDER BY estDepartureDateTime;
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000002 06-OCT-17 S0009            5250 S0010            7290                 
+                                                                                
+                                                                                
+000000015 06-NOV-17 S0009            5250 S0010            7290                 
+               11.8333333               11.8333333                              
+                                                                                
+000000003 08-OCT-18 S0001            4030 S0010            7290                 
+                                        23.6666667                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000004 10-OCT-18 S0009            5250 S0010            7290                 
+               23.6666667                     35.5                              
+                                                                                
+000000005 12-OCT-18 S0002            3589 S0010            7290                 
+                                        47.3333333                              
+                                                                                
+000000006 14-OCT-18 S0009            5250 S0010            7290                 
+                     35.5               59.1666667                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000007 16-OCT-18 S0002            3589 S0010            7290                 
+               11.8333333                       71                              
+                                                                                
+000000008 18-OCT-18 S0001            4030 S0010            7290                 
+               11.8333333               82.8333333                              
+                                                                                
+000000009 20-OCT-18 S0009            5250 S0010            7290                 
+               47.3333333               94.6666667                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000010 22-OCT-18 S0009            5250 S0010            7290                 
+               59.1666667                    106.5                              
+                                                                                
+000000011 24-OCT-18 S0001            4030 S0010            7290                 
+               23.6666667               118.333333                              
+                                                                                
+000000012 26-OCT-18 S0002            3589 S0010            7290                 
+               23.6666667               130.166667                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000013 28-OCT-18 S0009            5250 S0010            7290                 
+                       71                      142                              
+                                                                                
+000000014 30-OCT-18 S0009            5250 S0010            7290                 
+               82.8333333               153.833333                              
+                                                                                
+000000001 03-NOV-18 S0001            4030 S0002            3589                 
+                     35.5                     35.5                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000016 08-NOV-18 S0001            4030 S0010            7290                 
+                     38.5               165.666667                              
+                                                                                
+000000017 10-NOV-18 S0009            5250 S0010            7290                 
+               94.6666667                    177.5                              
+                                                                                
+000000018 12-NOV-18 S0002            3589 S0010            7290                 
+                     38.5               189.333333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000019 14-NOV-18 S0009            5250 S0010            7290                 
+                    106.5               201.166667                              
+                                                                                
+000000020 16-NOV-18 S0002            3589 S0010            7290                 
+               50.3333333                      213                              
+                                                                                
+000000021 18-NOV-18 S0001            4030 S0010            7290                 
+               50.3333333               224.833333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000022 20-NOV-18 S0009            5250 S0010            7290                 
+               118.333333               236.666667                              
+                                                                                
+000000023 22-NOV-18 S0009            5250 S0010            7290                 
+               130.166667                    248.5                              
+                                                                                
+000000028 24-NOV-18 S0001            4030 S0010            7290                 
+               62.1666667               260.333333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000024 24-NOV-18 S0001            4030 S0010            7290                 
+               62.1666667               260.333333                              
+                                                                                
+000000025 26-NOV-18 S0002            3589 S0010            7290                 
+               62.1666667                      284                              
+                                                                                
+000000029 26-NOV-18 S0002            3589 S0010            7290                 
+               62.1666667                      284                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000030 28-NOV-18 S0009            5250 S0010            7290                 
+                      142               307.666667                              
+                                                                                
+000000026 28-NOV-18 S0009            5250 S0010            7290                 
+                      142               307.666667                              
+                                                                                
+000000031 30-NOV-18 S0009            5250 S0010            7290                 
+               165.666667               331.333333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000027 30-NOV-18 S0009            5250 S0010            7290                 
+               165.666667               331.333333                              
+                                                                                
+000000032 01-DEC-18 S0001            4030 S0002            3589                 
+               85.8333333               85.8333333                              
+                                                                                
+000000033 03-DEC-18 S0001            4030 S0002            3589                 
+               91.8333333               91.8333333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000034 05-DEC-18 S0001            4030 S0002            3589                 
+               99.8333333               99.8333333                              
+                                                                                
+000000035 07-DEC-18 S0001            4030 S0002            3589                 
+               100.833333               100.833333                              
+                                                                                
+000000036 09-DEC-18 S0001            4030 S0002            3589                 
+               107.833333               107.833333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000038 01-JAN-20 S0009            5250 S0010            7290                 
+               189.333333                      355                              
+                                                                                
+000000045 01-JAN-20 S0003                 S0002            3589                 
+                                        110.833333                              
+                                                                                
+000000044 01-JAN-20 S0003                 S0002            3589                 
+                                        110.833333                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000042 01-JAN-20 S0001            4030 S0002            3589                 
+               110.833333               110.833333                              
+                                                                                
+000000043 01-JAN-20 S0001            4030 S0002            3589                 
+               110.833333               110.833333                              
+                                                                                
+000000039 05-JAN-20 S0009            5250 S0010            7290                 
+               189.333333                      355                              
+                                                                                
+
+FLIGHTID  ESTDEPART STAFF PREVHRSPILOTEXP STAFF PREVHRSPILOTEXP                 
+--------- --------- ----- --------------- ----- ---------------                 
+CAPTOTALHOURSBEFOREFLIGHT FOTOTALHOURSBEFOREFLIGHT                              
+------------------------- ------------------------                              
+000000040 08-JAN-20 S0009            5250 S0010            7290                 
+               189.333333                      355                              
+                                                                                
+000000041 11-JAN-20 S0009            5250 S0010            7290                 
+               189.333333                      355                              
+                                                                                
+000000037 09-DEC-20 S0001            4030 S0002            3589                 
+               110.833333               110.833333                              
+                                                                                
+
+45 rows selected.
+
+--f.
+SQL> SELECT T1.flightID, numberOfTicketsSold, numberOfHosts
+  2  FROM
+  3  	(SELECT F.flightID, COUNT(T.flightID) AS numberOfTicketsSold
+  4  	FROM FLIGHT F, TICKET T
+  5  	WHERE F.flightID = T.flightID
+  6  	AND F.actDepartDateTime IS NOT NULL
+  7  	GROUP BY F.flightID) T1,
+  8  	(SELECT F.flightID, COUNT(H.flightID) AS numberOfHosts
+  9  	FROM FLIGHT F, HOSTING H
+ 10  	WHERE F.flightID = H.flightID
+ 11  	AND F.actDepartDateTime IS NOT NULL
+ 12  	GROUP BY F.flightID) T2
+ 13  WHERE T1.flightID = T2.flightID;
+
+FLIGHTID  NUMBEROFTICKETSSOLD NUMBEROFHOSTS                                     
+--------- ------------------- -------------                                     
+000000001                   7             2                                     
+000000002                   8             1                                     
+000000003                   8             2                                     
+000000014                   9             1                                     
+000000031                   9             2                                     
+000000016                   9             2                                     
+000000021                   1             1                                     
+000000025                   1             1                                     
+000000028                   1             1                                     
+000000008                   8             1                                     
+000000013                   8             2                                     
+
+FLIGHTID  NUMBEROFTICKETSSOLD NUMBEROFHOSTS                                     
+--------- ------------------- -------------                                     
+000000018                   8             2                                     
+000000026                   1             1                                     
+000000012                   8             2                                     
+000000020                   1             1                                     
+000000022                   1             1                                     
+000000004                   9             2                                     
+000000015                   9             2                                     
+000000029                   1             1                                     
+000000030                   1             1                                     
+000000032                   8             2                                     
+000000005                   9             1                                     
+
+FLIGHTID  NUMBEROFTICKETSSOLD NUMBEROFHOSTS                                     
+--------- ------------------- -------------                                     
+000000010                   9             2                                     
+000000023                   1             1                                     
+000000027                   1             1                                     
+000000007                   8             2                                     
+000000011                   9             1                                     
+000000017                   9             1                                     
+000000019                   9             2                                     
+000000033                   8             2                                     
+000000035                   8             2                                     
+000000006                   9             2                                     
+000000009                   9             2                                     
+
+FLIGHTID  NUMBEROFTICKETSSOLD NUMBEROFHOSTS                                     
+--------- ------------------- -------------                                     
+000000024                   1             1                                     
+000000036                   8             2                                     
+
+35 rows selected.
+
+--g.
+SQL> SELECT M.modelID, A.aircraftID, A.haulType, (NVL(M.economySeats, 0) + NVL(M.businessSeats, 0) + NVL(M.firstClassSeats, 0)) AS totalNumberOfSeats
+  2  FROM MODEL M, AIRCRAFT A
+  3  WHERE M.modelID = A.modelID
+  4  AND 2 >=
+  5  	(SELECT COUNT(*)
+  6  	 FROM MODEL M1
+  7  	 WHERE (NVL(M.economySeats, 0) + NVL(M.businessSeats, 0) + NVL(M.firstClassSeats, 0)) <= (NVL(M1.economySeats, 0) + NVL(M1.businessSeats, 0) + NVL(M1.firstClassSeats, 0)));
+
+MODELID         AIRCR HAULT TOTALNUMBEROFSEATS                                  
+--------------- ----- ----- ------------------                                  
+Boeing 747-400D A0003 long                 660                                  
+Boeing 747-8    A0001 long                 410                                  
+Boeing 747-8    A0006 long                 410                                  
+
+--h.
+SQL> SELECT F.flightID, C.customerID, C.name, C.email AS "contactDetails"
+  2  FROM FLIGHT F, CUSTOMER C, LOCATION L, ROUTE R, TICKET T
+  3  WHERE L.airportCode = 'NED'
+  4  AND L.airportCode = R.arriveAirportCode
+  5  AND R.routeID = F.routeID
+  6  AND F.flightID = T.flightID
+  7  AND T.customerID = C.customerID
+  8  UNION
+  9  SELECT F.flightID, C.customerID, C.name, C.phone
+ 10  FROM FLIGHT F, CUSTOMER C, LOCATION L, ROUTE R, TICKET T
+ 11  WHERE L.airportCode = 'NED'
+ 12  AND L.airportCode = R.departAirportCode
+ 13  AND R.routeID = F.routeID
+ 14  AND F.flightID = T.flightID
+ 15  AND T.customerID = C.customerID
+ 16  ORDER BY flightID, customerID;
+
+FLIGHTID  CUSTO NAME                 contactDetails                             
+--------- ----- -------------------- -------------------------                  
+000000001 C0002 Sarah Delaney        sarahdelaney@memail.com                    
+000000001 C0006 Yves de Wever        yvesdewever@hotmail.com                    
+000000001 C0007 Elizabeth Spencer    elispencer@hotmail.com                     
+000000001 C0011 Mahmoud Saikal       msaikal@gmail.com                          
+000000001 C0016 Martin Garcia        mgarcia@gmail.com                          
+000000001 C0021 Sheila Carey         shiela@bmail.com                           
+000000001 C0026 Marc de Buytswerve   marcb@gmail.com                            
+000000036 C0001 Jonie Jones          +4958364765                                
+000000036 C0005 Nik Malema           +5783749100                                
+000000036 C0010 Jomo Biwott          +8766001962                                
+000000036 C0015 Walton Webson        +2897710988                                
+
+FLIGHTID  CUSTO NAME                 contactDetails                             
+--------- ----- -------------------- -------------------------                  
+000000036 C0020 Yashar Aliyev        +9762891890                                
+000000036 C0025 Valentin Rybakov     +9008798161                                
+000000036 C0026 Marc de Buytswerve   +7888609811                                
+000000036 C0030 Sacha Soliz          +1239876462                                
+
+15 rows selected.
+
+--i
+SQL> SELECT C.customerID, COUNT(T.customerID) AS "ticketsPurchased"
+  2  FROM CUSTOMER C, FLIGHT F, TICKET T, IRREGULAR_EVENT IE
+  3  WHERE F.flightID = IE.flightID(+)
+  4  AND IE.flightID IS NULL
+  5  AND C.customerID = T.customerID
+  6  AND T.flightID = F.flightID
+  7  GROUP BY(C.customerID, T.customerID)
+  8  HAVING COUNT(T.customerID) > 4;
+
+CUSTO ticketsPurchased                                                          
+----- ----------------                                                          
+C0025                6                                                          
+C0022                5                                                          
+C0019                6                                                          
+C0010                5                                                          
+C0021                5                                                          
+C0016                5                                                          
+C0024                5                                                          
+C0013               24                                                          
+C0017                5                                                          
+C0026                5                                                          
+C0014                5                                                          
+
+CUSTO ticketsPurchased                                                          
+----- ----------------                                                          
+C0020                6                                                          
+C0005                5                                                          
+C0030                5                                                          
+C0015                5                                                          
+
+15 rows selected.
+
+--j
+SQL> SELECT F.flightID, TO_CHAR(F.actDepartDateTime, 'DDTH-MONTH-YYYY') AS "actualDepartureDate",
+  2  				   TO_CHAR(F.actDepartDateTime, 'HH:MMam')		   AS "actualDepartureTime",
+  3  				   (SYSDATE - F.actDepartDateTime) 			       AS "numberOfDaysPast"
+  4  FROM FLIGHT F
+  5  WHERE F.actDepartDateTime IS NOT NULL;
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000001 03RD-NOVEMBER -2018                            01:11pm                
+      206.206539                                                                
+                                                                                
+000000002 06TH-OCTOBER  -2017                            12:10am                
+      599.737789                                                                
+                                                                                
+000000003 08TH-OCTOBER  -2018                            12:10am                
+      232.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000004 10TH-OCTOBER  -2018                            12:10am                
+      230.737789                                                                
+                                                                                
+000000005 12TH-OCTOBER  -2018                            12:10am                
+      228.737789                                                                
+                                                                                
+000000006 14TH-OCTOBER  -2018                            12:10am                
+      226.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000007 16TH-OCTOBER  -2018                            12:10am                
+      224.737789                                                                
+                                                                                
+000000008 18TH-OCTOBER  -2018                            12:10am                
+      222.737789                                                                
+                                                                                
+000000009 20TH-OCTOBER  -2018                            12:10am                
+      220.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000010 22ND-OCTOBER  -2018                            12:10am                
+      218.737789                                                                
+                                                                                
+000000011 24TH-OCTOBER  -2018                            12:10am                
+      216.737789                                                                
+                                                                                
+000000012 26TH-OCTOBER  -2018                            12:10am                
+      214.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000013 28TH-OCTOBER  -2018                            12:10am                
+      212.737789                                                                
+                                                                                
+000000014 30TH-OCTOBER  -2018                            12:10am                
+      210.737789                                                                
+                                                                                
+000000015 06TH-NOVEMBER -2017                            12:11am                
+      568.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000016 08TH-NOVEMBER -2018                            12:11am                
+      201.737789                                                                
+                                                                                
+000000017 10TH-NOVEMBER -2018                            12:11am                
+      199.737789                                                                
+                                                                                
+000000018 12TH-NOVEMBER -2018                            12:11am                
+      197.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000019 14TH-NOVEMBER -2018                            12:11am                
+      195.737789                                                                
+                                                                                
+000000020 16TH-NOVEMBER -2018                            12:11am                
+      193.737789                                                                
+                                                                                
+000000021 18TH-NOVEMBER -2018                            12:11am                
+      191.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000022 20TH-NOVEMBER -2018                            12:11am                
+      189.737789                                                                
+                                                                                
+000000023 22ND-NOVEMBER -2018                            12:11am                
+      187.737789                                                                
+                                                                                
+000000024 24TH-NOVEMBER -2018                            12:11am                
+      185.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000025 26TH-NOVEMBER -2018                            12:11am                
+      183.737789                                                                
+                                                                                
+000000026 28TH-NOVEMBER -2018                            12:11am                
+      181.737789                                                                
+                                                                                
+000000027 30TH-NOVEMBER -2018                            12:11am                
+      179.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000028 24TH-NOVEMBER -2018                            12:11am                
+      185.737789                                                                
+                                                                                
+000000029 26TH-NOVEMBER -2018                            12:11am                
+      183.737789                                                                
+                                                                                
+000000030 28TH-NOVEMBER -2018                            12:11am                
+      181.737789                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000031 30TH-NOVEMBER -2018                            12:11am                
+      179.737789                                                                
+                                                                                
+000000032 01ST-DECEMBER -2018                            12:12pm                
+       178.25515                                                                
+                                                                                
+000000033 03RD-DECEMBER -2018                            01:12am                
+        176.7239                                                                
+                                                                                
+
+FLIGHTID  actualDepartureDate                            actualD                
+--------- ---------------------------------------------- -------                
+numberOfDaysPast                                                                
+----------------                                                                
+000000034 05TH-DECEMBER -2018                            06:12am                
+       174.50515                                                                
+                                                                                
+000000035 07TH-DECEMBER -2018                            11:12am                
+      172.275984                                                                
+                                                                                
+000000036 09TH-DECEMBER -2018                            10:12am                
+      170.331539                                                                
+                                                                                
+
+36 rows selected.
+
+SQL> set serveroutput on
+
+--task 2
+--a
+SQL> CREATE OR REPLACE PROCEDURE flightIsAvaible(
+  2  	p_flightID FLIGHT.flightID%TYPE,
+  3  	p_luggageLimit TICKET.luggageLimit%TYPE,
+  4  	p_classCode TICKET.classCode%TYPE,
+  5  	p_desiredNumberOfSeats NUMBER) AS
+  6  
+  7  	v_flightID 					FLIGHT.flightID%TYPE;
+  8  	v_estDepartureDateTime 		FLIGHT.estDepartureDateTime%TYPE;
+  9  	v_economySeats 				MODEL.economySeats%TYPE;
+ 10  	v_businessSeats 			MODEL.businessSeats%TYPE;
+ 11  	v_firstClassSeats 			MODEL.firstClassSeats%TYPE;
+ 12  	v_cargoCapacity 			MODEL.cargoCapacity%TYPE;
+ 13  	v_mailCargoCapacity 		AIRCRAFT.mailCargoCapacity%TYPE;
+ 14  
+ 15  	v_luggageTaken NUMBER;
+ 16  
+ 17  	v_takenEconomySeats 			MODEL.economySeats%TYPE;
+ 18  	v_takenBusinessSeats 			MODEL.businessSeats%TYPE;
+ 19  	v_takenFirstClassSeats 			MODEL.firstClassSeats%TYPE;
+ 20  
+ 21  
+ 22  BEGIN
+ 23  
+ 24  	SELECT F.flightID, F.estDepartureDateTime, NVL(M.economySeats, 0), NVL(M.businessSeats, 0),
+ 25  		   NVL(M.firstClassSeats, 0), NVL(M.cargoCapacity, 0), NVL(A.mailCargoCapacity, 0), SUM(T.luggageLimit)
+ 26  	INTO v_flightID, v_estDepartureDateTime, v_economySeats, v_businessSeats,
+ 27  		 v_firstClassSeats, v_cargoCapacity, v_mailCargoCapacity, v_luggageTaken
+ 28  	FROM FLIGHT F, MODEL M, AIRCRAFT A, TICKET T
+ 29  	WHERE p_flightID = F.flightID
+ 30  	AND F.aircraftID = A.aircraftID
+ 31  	AND A.modelID = M.modelID
+ 32  	AND T.flightID = F.flightID
+ 33  	GROUP BY F.flightID, F.estDepartureDateTime, M.economySeats, M.businessSeats,
+ 34  		     M.firstClassSeats, M.cargoCapacity, A.mailCargoCapacity;
+ 35  
+ 36  	SELECT F.flightID, COUNT(T.flightID)
+ 37  	INTO v_flightID, v_takenEconomySeats
+ 38  	FROM FLIGHT F, TICKET T
+ 39  	WHERE p_flightID = F.flightID
+ 40  	AND 'E' = T.classCode
+ 41  	AND T.flightID = F.flightID
+ 42  	GROUP BY F.flightID;
+ 43  
+ 44  	SELECT F.flightID, COUNT(T.flightID)
+ 45  	INTO v_flightID, v_takenFirstClassSeats
+ 46  	FROM FLIGHT F, TICKET T
+ 47  	WHERE p_flightID = F.flightID
+ 48  	AND 'F' = T.classCode
+ 49  	AND T.flightID = F.flightID
+ 50  	GROUP BY F.flightID;
+ 51  
+ 52  	SELECT F.flightID, COUNT(T.flightID)
+ 53  	INTO v_flightID, v_takenBusinessSeats
+ 54  	FROM FLIGHT F, TICKET T
+ 55  	WHERE p_flightID = F.flightID
+ 56  	AND 'B' = T.classCode
+ 57  	AND T.flightID = F.flightID
+ 58  	GROUP BY F.flightID;
+ 59  
+ 60  	IF((24*(v_estDepartureDateTime - SYSDATE)) >= 3) THEN
+ 61  		IF(p_classCode = 'E' AND ((v_economySeats - v_takenEconomySeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+ 62  			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+ 63  		ELSIF(p_classCode = 'B' AND ((v_businessSeats - v_takenBusinessSeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+ 64  			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+ 65  		ELSIF(p_classCode = 'F' AND ((v_firstClassSeats - v_takenFirstClassSeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+ 66  			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+ 67  		ELSE
+ 68  			DBMS_OUTPUT.PUT_LINE ('Flight is NOT avaliable for booking');
+ 69  		END IF;
+ 70  	ELSE
+ 71  		DBMS_OUTPUT.PUT_LINE ('Flight is NOT avaliable for booking');
+ 72  	END IF;
+ 73  
+ 74  END flightIsAvaible;
+ 75  /
+
+Procedure created.
+
+SQL> execute flightIsAvaible('000000003', 100, 'E', 4);
+Flight is NOT avaliable for booking                                             
+
+PL/SQL procedure successfully completed.
+
+SQL> execute flightIsAvaible('000000005', 100, 'E', 4);
+Flight is NOT avaliable for booking                                             
+
+PL/SQL procedure successfully completed.
+
+SQL> execute flightIsAvaible('000000010', 100, 'F', 1);
+Flight is NOT avaliable for booking                                             
+
+PL/SQL procedure successfully completed.
+
+--b
+SQL> CREATE OR REPLACE PROCEDURE routeIsAvaible(
+  2  	p_desiredAirportArvCode ROUTE.arriveAirportCode%TYPE,
+  3  	p_desiredAirportDepCode ROUTE.departAirportCode%TYPE,
+  4  	p_luggageLimit			TICKET.luggageLimit%TYPE,
+  5  	p_classCode				TICKET.classCode%TYPE,
+  6  	p_desiredNumberOfSeats 	NUMBER) AS
+  7  
+  8  	CURSOR c_flight IS
+  9  		SELECT F.flightID,
+ 10  		       F.estDepartureDateTime,
+ 11  			   NVL(M.economySeats, 0) 		AS economySeats,
+ 12  			   NVL(M.businessSeats, 0) 		AS businessSeats,
+ 13  			   NVL(M.firstClassSeats, 0) 	AS firstClassSeats,
+ 14  			   NVL(M.cargoCapacity, 0) 		AS cargoCapacity,
+ 15  			   NVL(A.mailCargoCapacity, 0) 	AS mailCargoCapacity,
+ 16  			   SUM(T.luggageLimit) 			AS luggageTaken,
+ 17  			   COUNT(T.flightID) 			AS ticketsTaken
+ 18  		FROM FLIGHT F, MODEL M, AIRCRAFT A, TICKET T, ROUTE R
+ 19  		WHERE F.routeID = R.routeID
+ 20  		AND F.aircraftID = A.aircraftID
+ 21  		AND A.modelID = M.modelID
+ 22  		AND T.flightID = F.flightID
+ 23  		AND (24*(F.estDepartureDateTime - SYSDATE)) >= 3
+ 24  		AND R.arriveAirportCode = p_desiredAirportArvCode
+ 25  		AND R.departAirportCode = p_desiredAirportDepCode
+ 26  		AND p_classCode = T.classCode
+ 27  		GROUP BY F.flightID, F.estDepartureDateTime, M.economySeats, M.businessSeats,
+ 28  		         M.firstClassSeats, M.cargoCapacity, A.mailCargoCapacity;
+ 29  
+ 30  BEGIN
+ 31  	DBMS_OUTPUT.PUT_LINE ('Flights avaliable for booking: ');
+ 32  	FOR p IN c_flight LOOP
+ 33  		IF(p_classCode = 'E' AND ((p.economySeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+ 34  			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+ 35  		ELSIF(p_classCode = 'B' AND ((p.businessSeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+ 36  			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+ 37  		ELSIF(p_classCode = 'F' AND ((p.firstClassSeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+ 38  			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+ 39  		END IF;
+ 40  	END LOOP;
+ 41  
+ 42  END routeIsAvaible;
+ 43  /
+
+Procedure created.
+
+SQL> execute routeIsAvaible('LAX', 'NEX', 100, 'E', 2);
+Flights avaliable for booking:                                                  
+
+PL/SQL procedure successfully completed.
+
+SQL> execute routeIsAvaible('MEL', 'NED', 100, 'E', 2);
+Flights avaliable for booking:                                                  
+
+PL/SQL procedure successfully completed.
+
+--c
+SQL> CREATE OR REPLACE PROCEDURE getFoodInfomation(
+  2  	p_flightID FLIGHT.flightID%TYPE
+  3  	p_mealChoice TICKET.mealChoice%TYPE) AS
+  4  
+  5  	v_numberOfMeals NUMBER;
+  6  	v_flightID FLIGHT.flightID%TYPE;
+  7  
+  8  BEGIN
+  9  	--for both types of meals
+ 10  	SELECT F.flightID, COUNT(T.flightID)
+ 11  	INTO v_flightID, v_numberOfMeals
+ 12  	FROM FLIGHT F, TICKET T
+ 13  	WHERE F.flightID = p_flightID
+ 14  	AND p_mealChoice = T.mealChoice(+)
+ 15  	AND F.flightID = T.flightID(+)
+ 16  	GROUP BY(F.flightID);
+ 17  
+ 18  	DBMS_OUTPUT.PUT_LINE('flightID: ' || p_flightID);
+ 19  	DBMS_OUTPUT.PUT_LINE('Number of ' || p_mealChoice || ' meals: ' || v_numberOfMeals);
+ 20  END getFoodInfomation;
+ 21  /
+
+Procedure created.
+
+SQL> execute getFoodInfomation('000000001', 'ST');
+flightID: 000000001                                                             
+Number of ST meals: 7                                                           
+
+PL/SQL procedure successfully completed.
+
+SQL> execute getFoodInfomation('000000001', 'VG');
+flightID: 000000001                                                             
+Number of VG meals: 0                                                           
+
+PL/SQL procedure successfully completed.
+
+--task 3
+--a
+SQL> CREATE OR REPLACE TRIGGER checkCapORFO
+  2  BEFORE INSERT ON FLIGHT FOR EACH ROW
+  3  DECLARE
+  4  	v_check1 	INTEGER;
+  5  	v_check2 	INTEGER;
+  6  	v_check3 	INTEGER;
+  7  	v_check4 	INTEGER;
+  8  	v_captainStaffID		FLIGHT.captainStaffID%TYPE;
+  9  	v_firstOfficerStaffID	FLIGHT.firstOfficerStaffID%TYPE;
+ 10  
+ 11  BEGIN
+ 12  	SELECT S.staffID
+ 13  	INTO v_captainStaffID
+ 14  	FROM STAFF S
+ 15  	WHERE S.staffID = :new.captainStaffID;
+ 16  
+ 17  	SELECT S.staffID
+ 18  	INTO v_firstOfficerStaffID
+ 19  	FROM STAFF S
+ 20  	WHERE S.staffID = :new.firstOfficerStaffID;
+ 21  
+ 22  	SELECT COUNT(*)
+ 23  	INTO v_check1
+ 24  	FROM STAFF S
+ 25  	WHERE S.staffID = :new.captainStaffID
+ 26  	AND S.pilotYesNo = 'N';
+ 27  
+ 28  	SELECT COUNT(*)
+ 29  	INTO v_check2
+ 30  	FROM STAFF S, PILOT_QUALIFICATION PQ
+ 31  	WHERE S.staffID = PQ.staffID
+ 32  	AND S.staffID = :new.captainStaffID
+ 33  	AND PQ.qualification <> 'ATPL';
+ 34  
+ 35  	SELECT COUNT(*)
+ 36  	INTO v_check3
+ 37  	FROM STAFF S
+ 38  	WHERE S.staffID = :new.firstOfficerStaffID
+ 39  	AND S.pilotYesNo = 'N';
+ 40  
+ 41  	SELECT COUNT(*)
+ 42  	INTO v_check4
+ 43  	FROM STAFF S, PILOT_QUALIFICATION PQ
+ 44  	WHERE S.staffID = PQ.staffID
+ 45  	AND S.staffID = :new.firstOfficerStaffID
+ 46  	AND PQ.qualification <> 'ATPL';
+ 47  
+ 48  	IF v_check1 > 0 THEN
+ 49  	RAISE_APPLICATION_ERROR(-20000, 'The captain is not a Pilot');
+ 50  	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_captainStaffID);
+ 51  	END IF;
+ 52  
+ 53  	IF v_check2 > 0 THEN
+ 54  	RAISE_APPLICATION_ERROR(-20000, 'The captain is does not have there ATPL');
+ 55  	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_captainStaffID);
+ 56  	END IF;
+ 57  
+ 58  	IF v_check3 > 0 THEN
+ 59  	RAISE_APPLICATION_ERROR(-20000, 'The First Officer is not a Pilot');
+ 60  	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_firstOfficerStaffID);
+ 61  	END IF;
+ 62  
+ 63  	IF v_check4 > 0 THEN
+ 64  	RAISE_APPLICATION_ERROR(-20000, 'The First Officer does not have there ATPL');
+ 65  	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_firstOfficerStaffID);
+ 66  	END IF;
+ 67  
+ 68  END checkCapORFO;
+ 69  /
+
+Trigger created.
+
+SQL> INSERT INTO FLIGHT VALUES ('000000046', to_date('01/01/2020 11:40:00', 'dd/mm/yyyy hh24:mi:ss'), NULL, NULL, 880, 28000, 420, 19400, 'long',  'S0003', 'S0002', 'R0005', 'A0006' );
+INSERT INTO FLIGHT VALUES ('000000046', to_date('01/01/2020 11:40:00', 'dd/mm/yyyy hh24:mi:ss'), NULL, NULL, 880, 28000, 420, 19400, 'long',  'S0003', 'S0002', 'R0005', 'A0006' )
+            *
+ERROR at line 1:
+ORA-20000: The First Officer does not have there ATPL 
+ORA-06512: at "19930144.CHECKCAPORFO", line 62 
+ORA-04088: error during execution of trigger '19930144.CHECKCAPORFO' 
+
+
+SQL> INSERT INTO FLIGHT VALUES ('000000007', to_date('16/10/2018 00:30:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 00:40:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 12:30:00', 'dd/mm/yyyy hh24:mi:ss'), 890, 29000, 720, 20050, 'long',  'S0002', 'S0010', 'R0002', 'A0001' );
+INSERT INTO FLIGHT VALUES ('000000007', to_date('16/10/2018 00:30:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 00:40:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 12:30:00', 'dd/mm/yyyy hh24:mi:ss'), 890, 29000, 720, 20050, 'long',  'S0002', 'S0010', 'R0002', 'A0001' )
+            *
+ERROR at line 1:
+ORA-20000: The captain is does not have there ATPL 
+ORA-06512: at "19930144.CHECKCAPORFO", line 52 
+ORA-04088: error during execution of trigger '19930144.CHECKCAPORFO' 
+
+--b
+SQL> CREATE SEQUENCE generateKey
+  2  START WITH 100
+  3  INCREMENT BY 1;
+
+
+SQL> CREATE TABLE BACKUP_TICKET
+  2  (cancelledKey			NUMBER		 NOT NULL,
+  3   backup_flightID 		CHAR(9)  	 NOT NULL,
+  4   backup_ticketNumber	VARCHAR2(5)  NOT NULL,
+  5   backup_seatNumber		NUMBER(3),
+  6   PRIMARY KEY(cancelledKey)
+  7  );
+
+SQL> CREATE OR REPLACE TRIGGER backupTicket
+  2  BEFORE DELETE ON TICKET
+  3  FOR EACH ROW
+  4  DECLARE
+  5  	v_actDepartDateTime DATE;
+  6  
+  7  BEGIN
+  8  	SELECT F.actDepartDateTime
+  9  	INTO v_actDepartDateTime
+ 10  	FROM FLIGHT F
+ 11  	WHERE F.flightID = :old.flightID;
+ 12  
+ 13  	IF(v_actDepartDateTime IS NULL) THEN
+ 14  	INSERT INTO BACKUP_TICKET
+ 15  	VALUES
+ 16  	(generateKey.nextVAL, :old.flightID, :old.ticketNum, :old.seatNum);
+ 17  	ELSE
+ 18  	DBMS_OUTPUT.PUT_LINE ('Ticket was not backed up');
+ 19  	END IF;
+ 20  
+ 21  END backupTicket;
+ 22  /
+
+Trigger created.
+
+SQL> DELETE
+  2  FROM TICKET T
+  3  WHERE T.ticketNum = 'T0003';
+Ticket was not backed up                                                        
+
+1 row deleted.
+
+SQL> DELETE
+  2  FROM TICKET T
+  3  WHERE T.ticketNum = 'T0009';
+Ticket was not backed up                                                        
+
+1 row deleted.
+
+SQL> spool off

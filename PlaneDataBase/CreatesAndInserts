@@ -1,0 +1,217 @@
+--Jarvis Cole 19930144
+--create statements
+CREATE TABLE Neacmember
+(memberID 		 		VARCHAR2(50)	 	NOT NULL,
+ flightGoldPoints	 	NUMBER(10,0),
+ PRIMARY KEY(memberID)
+);
+
+CREATE TABLE Model
+(modelID 			 	VARCHAR2(50)		NOT NULL,
+ economySeats 			NUMBER(5,0),
+ buisnessSeats 			NUMBER(5,0),
+ firstClassSeats		NUMBER(5,0),
+ cargoCapacity			NUMBER(5,0),
+ fuelCapacity			NUMBER(5,0),
+ length					NUMBER(5,2),
+ wingspan				NUMBER(5,2),
+ serviceHours			NUMBER(5,0),
+ PRIMARY KEY(modelID)
+);
+ 
+CREATE TABLE Service
+(aircraftID 	 		VARCHAR2(50)		NOT NULL,
+ serviceDate	 		DATE				NOT NULL,
+ description	 		VARCHAR2(100),
+ cost			 		NUMBER(10,2),
+ PRIMARY KEY(aircraftID, serviceDate)
+);
+
+CREATE TABLE LHAircraft
+(aircraftID 	 		VARCHAR2(50)		NOT NULL,
+ modelID 			 	VARCHAR2(50)		NOT NULL,
+ numMedPacks 			NUMBER(5,0),
+ numDefibrillators		NUMBER(5,0),
+ PRIMARY KEY(aircraftID),
+ FOREIGN KEY(modelID) REFERENCES Model(modelID)
+);
+
+CREATE TABLE SHAircraft
+(aircraftID 	 		VARCHAR2(50)		NOT NULL,
+ modelID 			 	VARCHAR2(50)		NOT NULL,
+ mailCargoCapacity			NUMBER(5,0),
+ PRIMARY KEY(aircraftID),
+ FOREIGN KEY(modelID) REFERENCES Model(modelID)
+);
+
+CREATE TABLE Location
+(airportCode 			VARCHAR2(3)			NOT NULL,
+ country 				VARCHAR2(50),
+ address				VARCHAR2(50),
+ phone					VARCHAR2(50),
+ PRIMARY KEY(airportCode)
+);
+
+CREATE TABLE Route
+(routeID				VARCHAR2(50)		NOT NULL,
+ description			VARCHAR2(100),
+ airportCodeDep 		VARCHAR2(3)			NOT NULL,
+ airportCodeArr 		VARCHAR2(3)			NOT NULL,
+ PRIMARY KEY(routeID),
+ FOREIGN KEY(airportCodeArr) REFERENCES Location(airportCode),
+ FOREIGN KEY(airportCodeDep) REFERENCES Location(airportCode)
+);
+
+CREATE TABLE Customer
+(customerID				VARCHAR2(50)		NOT NULL,
+ name 					VARCHAR2(50),
+ address				VARCHAR2(50),
+ country				VARCHAR2(50),
+ email					VARCHAR2(50),
+ phone					VARCHAR2(50),
+ birthdate				DATE,
+ passportNum			VARCHAR2(50),
+ memberID 		 		VARCHAR2(50)	 	NOT NULL,
+ PRIMARY KEY(customerID),
+ FOREIGN KEY(memberID) REFERENCES Neacmember(memberID)
+); 
+
+CREATE TABLE Host
+(staffID				VARCHAR2(50)		NOT NULL,
+ flightID				VARCHAR2(9)			NOT NULL,
+ PRIMARY KEY(staffID, flightID)
+);
+
+CREATE TABLE FlightAttendant
+(staffID				VARCHAR2(50)		NOT NULL,
+ PRIMARY KEY(staffID)
+);
+
+CREATE TABLE PQualifications
+(staffID				VARCHAR2(50)		NOT NULL,
+ qualifications			VARCHAR2(50)		NOT NULL,
+ PRIMARY KEY(staffID, qualifications)
+);
+
+CREATE TABLE Pilot
+(staffID				VARCHAR2(50)		NOT NULL,
+ prevHrsPilotExp		NUMBER(7,2),
+ PRIMARY KEY(staffID)
+);
+
+CREATE TABLE Staff
+(staffID				VARCHAR2(50)		NOT NULL,
+ name 					VARCHAR2(50),
+ address				VARCHAR2(50),
+ email					VARCHAR2(50),
+ phone					VARCHAR2(50),
+ passportNum			VARCHAR2(50),
+ memberID				VARCHAR2(50) 		NOT NULL,
+ PRIMARY KEY(staffID),
+ FOREIGN KEY(memberID) REFERENCES Neacmember(memberID)
+);
+
+CREATE TABLE IrregularEvent
+(staffID				VARCHAR2(50)		NOT NULL,
+ eventNumber			NUMBER(2)			NOT NULL,
+ eventDateTime			DATE,
+ activityDesc			VARCHAR2(100),
+ PRIMARY KEY(staffID, eventNumber)
+); 
+
+CREATE TABLE AdditionalPilot
+(staffID 				VARCHAR2(50)		NOT NULL,
+ flightID				VARCHAR2(9)			NOT NULL,
+ activityCode			VARCHAR2(2),
+ activityDesc			VARCHAR2(100),
+ PRIMARY KEY(staffID, flightID)
+);
+
+CREATE TABLE Flight
+(flightID				VARCHAR2(9)			NOT NULL,
+ estDepartDateTime		DATE,
+ actDepartDateTime		DATE,
+ actArriveDateTime		DATE,
+ avgSpeed				NUMBER(7,2),
+ avgHeight				NUMBER(10,2),
+ estDuration			NUMBER(10,2),
+ estFuel				NUMBER(10,2),
+ routeID				VARCHAR2(50)		NOT NULL,
+ haulType				VARCHAR2(2),
+ aircraftIDLH	 		VARCHAR2(50)		NOT NULL,
+ aircraftIDSH			VARCHAR2(50)		NOT NULL,
+ staffIDCAP				VARCHAR2(50)		NOT NULL,
+ staffIDFO				VARCHAR2(50)		NOT NULL,
+ PRIMARY KEY(flightID),
+ FOREIGN KEY(routeID) 		REFERENCES Route(routeID),
+ FOREIGN KEY(aircraftIDLH) 	REFERENCES LHAircraft(aircraftID),
+ FOREIGN KEY(aircraftIDSH)  REFERENCES SHAircraft(aircraftID),
+ FOREIGN KEY(staffIDCAP) 	REFERENCES Pilot(staffID),
+ FOREIGN KEY(staffIDFO) 	REFERENCES Pilot(staffID)
+);
+ 
+CREATE TABLE Ticket
+(ticketNum 				VARCHAR2(50)		NOT NULL,
+ luggageLimit			NUMBER(3),
+ seatNum				NUMBER(3),
+ classCode				CHAR(1),
+ medicalCondition		VARCHAR2(100),
+ mealChoice				VARCHAR2(50),
+ flightID				VARCHAR2(9)			NOT NULL,
+ customerID				VARCHAR2(50)		NOT NULL,
+ PRIMARY KEY(ticketNum),
+ FOREIGN KEY(flightID) REFERENCES Flight(flightID),
+ FOREIGN KEY(customerID) REFERENCES Customer(customerID)
+);
+
+--insert statements
+INSERT INTO Neacmember VALUES('nc001', 1000);
+INSERT INTO Neacmember VALUES('nc002', 100000);
+INSERT INTO Neacmember VALUES('nc003', 100000);
+INSERT INTO Neacmember VALUES('nc004', 100000);
+
+INSERT INTO Model VALUES('md001', 100, 10, 10, 1000, 1000, 100.11, 100.11, 1000);
+
+INSERT INTO Service VALUES('sv001', (TO_DATE('27/04/2019', 'dd/mm/yyyy')), 'good', 200.22);
+
+INSERT INTO LHAircraft VALUES('la001', 'md001', 303, 30);
+
+INSERT INTO SHAircraft VALUES('sa001', 'md001', 400);
+
+INSERT INTO Location VALUES('MEL', 'Australia', '505 Sesh Street Kew 3101 VIC', '1300 555 5569');
+INSERT INTO Location VALUES('PER', 'Australia', '606 Faraway Street Jolimont 6014 SA', '1300 666 6669');
+
+INSERT INTO Route VALUES('rt001', 'realy far away like realllly', 'MEL', 'PER');
+
+INSERT INTO Customer VALUES('cs001', 'Seb', '808 Sesh Street Kew 3101 VIC', 'Australia', 'seb@privacyleak.com.au', '04 888 8888',
+TO_DATE('27/04/1990', 'dd/mm/yyyy'), 'S888088', 'nc001');
+
+INSERT INTO Staff VALUES('sf001', 'Jarvis Cole', '909 Sesh Street Kew 3101 VIC', 'jarvis@privacyleak.com.au', '04 999 9999', 
+'J999099', 'nc002');
+INSERT INTO Staff VALUES('sf002', 'Max Baby', '901 Sesh Street Kew 3101 VIC', 'max@privacyleak.com.au', '04 111 9999', 
+'J999011', 'nc003');
+INSERT INTO Staff VALUES('sf003', 'James Lary', '902 Sesh Street Kew 3101 VIC', 'james@privacyleak.com.au', '04 111 1111', 
+'J999000', 'nc004');
+
+INSERT INTO Pilot VALUES('sf001', 10100.50);
+INSERT INTO Pilot VALUES('sf002', 10100.51);
+INSERT INTO Pilot VALUES('sf003', 10100.53);
+
+INSERT INTO PQualifications VALUES('sf001', 'pq254/"degreeInPilotrySesh"');
+
+INSERT INTO FlightAttendant VALUES('sf001');
+
+INSERT INTO Flight VALUES('fl0000001', (TO_DATE('27/04/2019 20:00:01', 'dd/mm/yyyy hh24:mi:ss')), 
+(TO_DATE('27/04/2019 20:00:02', 'dd/mm/yyyy hh24:mi:ss')), (TO_DATE('27/04/2019 22:00:02', 'dd/mm/yyyy hh24:mi:ss')), 
+324.29, 5000.04, 2.25, 999.99, 'rt001', 'LH', 'la001', 'sa001', 'sf001', 'sf002');
+
+INSERT INTO AdditionalPilot VALUES('sf003', 'fl0000001', 'TR', 'older pilot learning new tricks, gps navigation');
+
+INSERT INTO IrregularEvent VALUES('fl0000001', 1, (TO_DATE('27/04/2019 21:00:02', 'dd/mm/yyyy hh24:mi:ss')),
+'smog in cockpit... may be caused by FO');
+
+INSERT INTO Host VALUES('sf003', 'fl0000001');
+
+INSERT INTO Ticket VALUES('tk001', '20', '92', 'F', 'Severed arm', 'Vegatarian', 'fl0000001', 'cs001');
+
+

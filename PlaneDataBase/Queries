@@ -1,0 +1,413 @@
+--task 1
+--a.
+SELECT SUM(cost)
+FROM SERVICE 
+WHERE aircraftID = 'A0001'
+AND serviceDate BETWEEN TO_DATE('01-JUL-2017') AND TO_DATE('30-JUN-2018');
+
+--b.
+SELECT A.modelID, F.aircraftID, (NVL(M.economySeats,0) + NVL(M.businessSeats,0) + NVL(M.firstClassSeats,0)) AS totalNumberOfSeats, L.country, (24*(F.actArriveDateTime - F.actDepartDateTime)) AS actualFlightDuration
+FROM FLIGHT F, AIRCRAFT A, MODEL M, ROUTE R, LOCATION L 
+WHERE A.modelID = M.modelID
+AND F.aircraftID = A.aircraftID
+AND R.routeID = F.routeID
+AND L.airportCode = R.departAirportCode
+AND L.airportCode = 'NEX'
+AND F.actArriveDateTime IS NOT NULL;
+GROUP BY(A.modelID, F.aircraftID, L.country);
+
+--c.
+SELECT MAX(24*(F.actArriveDateTime - F.actDepartDateTime)) AS actualFlightDuration, A.modelID, M.planeLength, M.wingspan, L.country
+FROM FLIGHT F, AIRCRAFT A, MODEL M, ROUTE R, LOCATION L
+WHERE A.modelID = M.modelID
+AND F.aircraftID = A.aircraftID
+AND R.routeID = F.routeID
+AND L.airportCode = R.departAirportCode
+AND L.airportCode = 'NEX'
+AND F.actDepartDateTime IS NOT NUll
+AND (24*(F.actArriveDateTime - F.actDepartDateTime)) = (SELECT MAX(24*(F.actArriveDateTime - F.actDepartDateTime))
+													   FROM FLIGHT F, ROUTE R
+													   WHERE R.routeID = F.routeID
+													   AND 'NEX' = R.departAirportCode
+													   AND F.actDepartDateTime IS NOT NUll)
+GROUP BY(A.modelID, M.planeLength, M.wingspan, L.country);
+
+--d.
+SELECT T3.staffID, NVL(prevHours,0) + NVL(CapOrFOTotalHours,0) + NVL(APHours,0) AS "totalFlyingExperience"
+FROM
+	(SELECT SSS.staffID, SSS.prevHrsPilotExp AS prevHours
+	FROM STAFF SSS
+	WHERE SSS.pilotYesNo = 'y'
+	GROUP BY(SSS.staffID, SSS.prevHrsPilotExp)) T3,	
+	(SELECT S.staffID, (SUM(24*(F.actArriveDateTime - F.actDepartDateTime))) AS CapOrFOTotalHours
+	FROM STAFF S, FLIGHT F
+	WHERE (S.staffID = F.captainStaffID OR S.staffID = F.firstOfficerStaffID)
+	GROUP BY(S.staffID)) T1,
+	(SELECT SS.staffID, SUM(24*(FF.actArriveDateTime - FF.actDepartDateTime)) AS APHours
+	FROM STAFF SS, FLIGHT FF, ADDITIONAL_PILOT AP
+	WHERE SS.staffID = AP.staffID
+	AND AP.flightID = FF.flightID
+	GROUP BY(SS.staffID)) T2
+WHERE T3.staffID = T1.staffID(+)
+AND T3.staffID = T2.staffID(+);
+
+--e. 
+SELECT F.flightID, F.estDepartureDateTime, SC.staffID, SC.prevHrsPilotExp,
+	   SO.staffID, SO.prevHrsPilotExp,
+	(SELECT SUM(24*(F2.actArriveDateTime - F2.actDepartDateTime))
+	FROM FLIGHT F2
+	WHERE (F2.captainStaffID = SC.staffID OR F2.firstOfficerStaffID = SC.staffID OR SC.staffID IN  (SELECT AD.staffID
+																								   FROM ADDITIONAL_PILOT AD
+																								   WHERE AD.flightID = F2.flightID))
+	AND (F2.estDepartureDateTime < F.estDepartureDateTime)) AS capTotalHoursBeforeFlight,
+	(SELECT SUM(24*(F3.actArriveDateTime - F3.actDepartDateTime))
+	FROM FLIGHT F3
+	WHERE (F3.captainStaffID = SO.staffID OR F3.firstOfficerStaffID = SO.staffID OR SO.staffID IN (SELECT AD.staffID
+																								   FROM ADDITIONAL_PILOT AD
+																								   WHERE AD.flightID = F3.flightID))
+	AND (F3.estDepartureDateTime < F.estDepartureDateTime)) AS FOTotalHoursBeforeFlight
+FROM FLIGHT F, STAFF SC, STAFF SO
+WHERE (SC.staffID = F.captainStaffID AND SO.staffID = F.firstOfficerStaffID)
+ORDER BY estDepartureDateTime;
+
+--f. 
+SELECT T1.flightID, numberOfTicketsSold, numberOfHosts
+FROM
+	(SELECT F.flightID, COUNT(T.flightID) AS numberOfTicketsSold
+	FROM FLIGHT F, TICKET T
+	WHERE F.flightID = T.flightID
+	AND F.actDepartDateTime IS NOT NULL
+	GROUP BY F.flightID) T1,
+	(SELECT F.flightID, COUNT(H.flightID) AS numberOfHosts
+	FROM FLIGHT F, HOSTING H
+	WHERE F.flightID = H.flightID
+	AND F.actDepartDateTime IS NOT NULL
+	GROUP BY F.flightID) T2
+WHERE T1.flightID = T2.flightID;
+
+
+--g. 
+SELECT M.modelID, A.aircraftID, A.haulType, (NVL(M.economySeats, 0) + NVL(M.businessSeats, 0) + NVL(M.firstClassSeats, 0)) AS totalNumberOfSeats
+FROM MODEL M, AIRCRAFT A
+WHERE M.modelID = A.modelID
+AND 2 >=
+	(SELECT COUNT(*)
+	 FROM MODEL M1
+	 WHERE (NVL(M.economySeats, 0) + NVL(M.businessSeats, 0) + NVL(M.firstClassSeats, 0)) <= (NVL(M1.economySeats, 0) + NVL(M1.businessSeats, 0) + NVL(M1.firstClassSeats, 0)));
+
+--h. 
+SELECT F.flightID, C.customerID, C.name, C.email AS "contactDetails"
+FROM FLIGHT F, CUSTOMER C, LOCATION L, ROUTE R, TICKET T
+WHERE L.airportCode = 'NED'
+AND L.airportCode = R.arriveAirportCode
+AND R.routeID = F.routeID
+AND F.flightID = T.flightID
+AND T.customerID = C.customerID
+UNION
+SELECT F.flightID, C.customerID, C.name, C.phone 
+FROM FLIGHT F, CUSTOMER C, LOCATION L, ROUTE R, TICKET T
+WHERE L.airportCode = 'NED'
+AND L.airportCode = R.departAirportCode
+AND R.routeID = F.routeID
+AND F.flightID = T.flightID
+AND T.customerID = C.customerID
+ORDER BY flightID, customerID;
+
+--i 
+SELECT C.customerID, COUNT(T.customerID) AS "ticketsPurchased"
+FROM CUSTOMER C, FLIGHT F, TICKET T, IRREGULAR_EVENT IE
+WHERE F.flightID = IE.flightID(+)
+AND IE.flightID IS NULL
+AND C.customerID = T.customerID 
+AND T.flightID = F.flightID
+GROUP BY(C.customerID, T.customerID)
+HAVING COUNT(T.customerID) > 4;
+
+
+--j
+SELECT F.flightID, TO_CHAR(F.actDepartDateTime, 'DDTH-MONTH-YYYY') AS "actualDepartureDate", 
+				   TO_CHAR(F.actDepartDateTime, 'HH:MMam')		   AS "actualDepartureTime",
+				   (SYSDATE - F.actDepartDateTime) 			       AS "numberOfDaysPast"
+FROM FLIGHT F
+WHERE F.actDepartDateTime IS NOT NULL;
+
+--task 2
+set serveroutput on
+
+--a 
+CREATE OR REPLACE PROCEDURE flightIsAvaible(
+	p_flightID FLIGHT.flightID%TYPE,
+	p_luggageLimit TICKET.luggageLimit%TYPE,
+	p_classCode TICKET.classCode%TYPE,
+	p_desiredNumberOfSeats NUMBER) AS
+	
+	v_flightID 					FLIGHT.flightID%TYPE;
+	v_estDepartureDateTime 		FLIGHT.estDepartureDateTime%TYPE;
+	v_economySeats 				MODEL.economySeats%TYPE;
+	v_businessSeats 			MODEL.businessSeats%TYPE;
+	v_firstClassSeats 			MODEL.firstClassSeats%TYPE;
+	v_cargoCapacity 			MODEL.cargoCapacity%TYPE;
+	v_mailCargoCapacity 		AIRCRAFT.mailCargoCapacity%TYPE;
+	
+	v_luggageTaken NUMBER;
+	
+	v_takenEconomySeats 			MODEL.economySeats%TYPE;
+	v_takenBusinessSeats 			MODEL.businessSeats%TYPE;
+	v_takenFirstClassSeats 			MODEL.firstClassSeats%TYPE;
+	
+	
+BEGIN 
+
+	SELECT F.flightID, F.estDepartureDateTime, NVL(M.economySeats, 0), NVL(M.businessSeats, 0), 
+		   NVL(M.firstClassSeats, 0), NVL(M.cargoCapacity, 0), NVL(A.mailCargoCapacity, 0), SUM(T.luggageLimit)
+	INTO v_flightID, v_estDepartureDateTime, v_economySeats, v_businessSeats,
+		 v_firstClassSeats, v_cargoCapacity, v_mailCargoCapacity, v_luggageTaken
+	FROM FLIGHT F, MODEL M, AIRCRAFT A, TICKET T
+	WHERE p_flightID = F.flightID
+	AND F.aircraftID = A.aircraftID
+	AND A.modelID = M.modelID
+	AND T.flightID = F.flightID
+	GROUP BY F.flightID, F.estDepartureDateTime, M.economySeats, M.businessSeats, 
+		     M.firstClassSeats, M.cargoCapacity, A.mailCargoCapacity;
+	
+	SELECT F.flightID, COUNT(T.flightID)
+	INTO v_flightID, v_takenEconomySeats
+	FROM FLIGHT F, TICKET T
+	WHERE p_flightID = F.flightID
+	AND 'E' = T.classCode
+	AND T.flightID = F.flightID
+	GROUP BY F.flightID;
+	
+	SELECT F.flightID, COUNT(T.flightID)
+	INTO v_flightID, v_takenFirstClassSeats
+	FROM FLIGHT F, TICKET T
+	WHERE p_flightID = F.flightID
+	AND 'F' = T.classCode
+	AND T.flightID = F.flightID
+	GROUP BY F.flightID;
+	
+	SELECT F.flightID, COUNT(T.flightID)
+	INTO v_flightID, v_takenBusinessSeats
+	FROM FLIGHT F, TICKET T
+	WHERE p_flightID = F.flightID
+	AND 'B' = T.classCode
+	AND T.flightID = F.flightID
+	GROUP BY F.flightID;
+	
+	IF((24*(v_estDepartureDateTime - SYSDATE)) >= 3) THEN
+		IF(p_classCode = 'E' AND ((v_economySeats - v_takenEconomySeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+		ELSIF(p_classCode = 'B' AND ((v_businessSeats - v_takenBusinessSeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+		ELSIF(p_classCode = 'F' AND ((v_firstClassSeats - v_takenFirstClassSeats) >= p_desiredNumberOfSeats) AND ((v_cargoCapacity - v_luggageTaken - v_mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('Flight IS avaliable for booking');
+		ELSE
+			DBMS_OUTPUT.PUT_LINE ('Flight is NOT avaliable for booking');
+		END IF;
+	ELSE
+		DBMS_OUTPUT.PUT_LINE ('Flight is NOT avaliable for booking');
+	END IF;
+
+END flightIsAvaible;
+/
+
+execute flightIsAvaible('000000003', 100, 'E', 4);
+execute flightIsAvaible('000000005', 100, 'E', 4);
+execute flightIsAvaible('000000010', 100, 'F', 1);
+
+--b
+CREATE OR REPLACE PROCEDURE routeIsAvaible(
+	p_desiredAirportArvCode ROUTE.arriveAirportCode%TYPE,
+	p_desiredAirportDepCode ROUTE.departAirportCode%TYPE,
+	p_luggageLimit			TICKET.luggageLimit%TYPE,
+	p_classCode				TICKET.classCode%TYPE,
+	p_desiredNumberOfSeats 	NUMBER) AS
+	
+	CURSOR c_flight IS
+		SELECT F.flightID, 
+		       F.estDepartureDateTime, 
+			   NVL(M.economySeats, 0) 		AS economySeats, 
+			   NVL(M.businessSeats, 0) 		AS businessSeats, 
+			   NVL(M.firstClassSeats, 0) 	AS firstClassSeats, 
+			   NVL(M.cargoCapacity, 0) 		AS cargoCapacity, 
+			   NVL(A.mailCargoCapacity, 0) 	AS mailCargoCapacity, 
+			   SUM(T.luggageLimit) 			AS luggageTaken, 
+			   COUNT(T.flightID) 			AS ticketsTaken
+		FROM FLIGHT F, MODEL M, AIRCRAFT A, TICKET T, ROUTE R
+		WHERE F.routeID = R.routeID
+		AND F.aircraftID = A.aircraftID
+		AND A.modelID = M.modelID
+		AND T.flightID = F.flightID
+		AND (24*(F.estDepartureDateTime - SYSDATE)) >= 3
+		AND R.arriveAirportCode = p_desiredAirportArvCode
+		AND R.departAirportCode = p_desiredAirportDepCode
+		AND p_classCode = T.classCode
+		GROUP BY F.flightID, F.estDepartureDateTime, M.economySeats, M.businessSeats, 
+		         M.firstClassSeats, M.cargoCapacity, A.mailCargoCapacity;
+
+BEGIN
+	DBMS_OUTPUT.PUT_LINE ('Flights avaliable for booking: ');
+	FOR p IN c_flight LOOP
+		IF(p_classCode = 'E' AND ((p.economySeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+		ELSIF(p_classCode = 'B' AND ((p.businessSeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+		ELSIF(p_classCode = 'F' AND ((p.firstClassSeats - p.ticketsTaken) >= p_desiredNumberOfSeats) AND ((p.cargoCapacity - p.luggageTaken - p.mailCargoCapacity) >= p_luggageLimit)) THEN
+			DBMS_OUTPUT.PUT_LINE ('NE ' || SUBSTR(p.flightID, 7, 3));
+		END IF;
+	END LOOP;
+	
+END routeIsAvaible;
+/
+
+execute routeIsAvaible('LAX', 'NEX', 100, 'E', 2);
+execute routeIsAvaible('MEL', 'NED', 100, 'E', 2);
+
+
+
+
+--c
+CREATE OR REPLACE PROCEDURE getFoodInfomation(
+	p_flightID FLIGHT.flightID%TYPE,
+	p_mealChoice TICKET.mealChoice%TYPE) AS
+	
+	v_numberOfMeals NUMBER;
+	v_flightID FLIGHT.flightID%TYPE;
+	
+BEGIN 
+	--for both types of meals
+	SELECT F.flightID, COUNT(T.flightID)
+	INTO v_flightID, v_numberOfMeals
+	FROM FLIGHT F, TICKET T
+	WHERE F.flightID = p_flightID 
+	AND p_mealChoice = T.mealChoice(+)
+	AND F.flightID = T.flightID(+)
+	GROUP BY(F.flightID);
+	
+	DBMS_OUTPUT.PUT_LINE('flightID: ' || p_flightID);
+	DBMS_OUTPUT.PUT_LINE('Number of ' || p_mealChoice || ' meals: ' || v_numberOfMeals);
+END getFoodInfomation;
+/
+
+execute getFoodInfomation('000000001', 'ST');
+execute getFoodInfomation('000000001', 'VG');
+
+--task 3
+
+--a
+CREATE OR REPLACE TRIGGER checkCapORFO
+BEFORE INSERT ON FLIGHT FOR EACH ROW
+DECLARE
+	v_check1 	INTEGER;
+	v_check2 	INTEGER;
+	v_check3 	INTEGER;
+	v_check4 	INTEGER;
+	v_captainStaffID		FLIGHT.captainStaffID%TYPE;
+	v_firstOfficerStaffID	FLIGHT.firstOfficerStaffID%TYPE;
+
+BEGIN
+	SELECT S.staffID
+	INTO v_captainStaffID
+	FROM STAFF S
+	WHERE S.staffID = :new.captainStaffID;
+	
+	SELECT S.staffID
+	INTO v_firstOfficerStaffID
+	FROM STAFF S
+	WHERE S.staffID = :new.firstOfficerStaffID;
+
+	SELECT COUNT(*)
+	INTO v_check1
+	FROM STAFF S
+	WHERE S.staffID = :new.captainStaffID
+	AND S.pilotYesNo = 'N';
+	
+	SELECT COUNT(*)
+	INTO v_check2
+	FROM STAFF S, PILOT_QUALIFICATION PQ
+	WHERE S.staffID = PQ.staffID
+	AND S.staffID = :new.captainStaffID
+	AND PQ.qualification <> 'ATPL';
+	
+	SELECT COUNT(*)
+	INTO v_check3
+	FROM STAFF S
+	WHERE S.staffID = :new.firstOfficerStaffID
+	AND S.pilotYesNo = 'N';
+	
+	SELECT COUNT(*)
+	INTO v_check4
+	FROM STAFF S, PILOT_QUALIFICATION PQ
+	WHERE S.staffID = PQ.staffID
+	AND S.staffID = :new.firstOfficerStaffID
+	AND PQ.qualification <> 'ATPL';
+	
+	IF v_check1 > 0 THEN
+	RAISE_APPLICATION_ERROR(-20000, 'The captain is not a Pilot');
+	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_captainStaffID);
+	END IF;
+	
+	IF v_check2 > 0 THEN
+	RAISE_APPLICATION_ERROR(-20000, 'The captain is does not have there ATPL');
+	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_captainStaffID);
+	END IF;
+	
+	IF v_check3 > 0 THEN
+	RAISE_APPLICATION_ERROR(-20000, 'The First Officer is not a Pilot');
+	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_firstOfficerStaffID);
+	END IF;
+	
+	IF v_check4 > 0 THEN
+	RAISE_APPLICATION_ERROR(-20000, 'The First Officer does not have there ATPL');
+	DBMS_OUTPUT.PUT_LINE ('Offending Staff: ' || v_firstOfficerStaffID);
+	END IF;
+	
+END checkCapORFO;
+/
+
+INSERT INTO FLIGHT VALUES ('000000046', to_date('01/01/2020 11:40:00', 'dd/mm/yyyy hh24:mi:ss'), NULL, NULL, 880, 28000, 420, 19400, 'long',  'S0003', 'S0002', 'R0005', 'A0006' );
+INSERT INTO FLIGHT VALUES ('000000007', to_date('16/10/2018 00:30:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 00:40:00', 'dd/mm/yyyy hh24:mi:ss'), to_date('16/10/2018 12:30:00', 'dd/mm/yyyy hh24:mi:ss'), 890, 29000, 720, 20050, 'long',  'S0002', 'S0010', 'R0002', 'A0001' );
+	
+
+--b
+CREATE SEQUENCE generateKey
+START WITH 100
+INCREMENT BY 1;
+
+CREATE TABLE BACKUP_TICKET
+(cancelledKey			NUMBER		 NOT NULL,	
+ backup_flightID 		CHAR(9)  	 NOT NULL,
+ backup_ticketNumber	VARCHAR2(5)  NOT NULL,
+ backup_seatNumber		NUMBER(3),
+ PRIMARY KEY(cancelledKey)
+);
+
+CREATE OR REPLACE TRIGGER backupTicket
+BEFORE DELETE ON TICKET
+FOR EACH ROW
+DECLARE
+	v_actDepartDateTime DATE;
+
+BEGIN
+	SELECT F.actDepartDateTime
+	INTO v_actDepartDateTime
+	FROM FLIGHT F
+	WHERE F.flightID = :old.flightID;
+	
+	IF(v_actDepartDateTime IS NULL) THEN
+	INSERT INTO BACKUP_TICKET
+	VALUES
+	(generateKey.nextVAL, :old.flightID, :old.ticketNum, :old.seatNum);
+	ELSE
+	DBMS_OUTPUT.PUT_LINE ('Ticket was not backed up');
+	END IF;
+	
+END backupTicket;
+/
+
+DELETE
+FROM TICKET T
+WHERE T.ticketNum = 'T0009';
+
+
+
